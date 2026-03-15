@@ -16,7 +16,7 @@ This project investigates how reducing the resolution of polysome profiling affe
 
 Polysome profiling separates mRNAs by ribosome occupancy via sucrose density gradient centrifugation. The original dataset uses 14 fractions. We simulate lower-resolution experiments by merging adjacent fractions into coarser schemes (7, 5, and 3 bins) and ask: does reducing experimental resolution hurt model performance?
 
-**Reference:** Sample, P.J. et al. Human 5′ UTR design and variant effect prediction from a massively parallel translation assay. *Nature Biotechnology* 37, 803–809 (2019). [GSM3130435](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSM3130435)
+**Reference:** Sample, P.J. et al. Human 5′ UTR design and variant effect prediction from a massively parallel translation assay. *Nature Biotechnology* 37, 803-809 (2019). [GSM3130435](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSM3130435)
 
 ---
 
@@ -25,7 +25,26 @@ Polysome profiling separates mRNAs by ribosome occupancy via sucrose density gra
 - **Resolution matters only little for prediction performance.** A CNN trained on 3-bin labels achieves nearly identical test PCC (~0.945) as one trained on 14-bin labels.
 - **The label ceiling is ~1.0 across all schemes.** Merging bins preserves sequence rankings almost perfectly. The information loss from coarser binning is negligible.
 - **Resolution changes what the model learns.** Attribution analysis via Integrated Gradients shows that 14-bin models learn fine-grained positional motifs, while 3-bin models rely more on global nucleotide composition. Cross-resolution profile correlation drops to r = 0.587 (14 vs 3 bins).
-- **Biological signal is recoverable.** Attribution logos show consistent patterns across resolutions: G and C suppress translation (likely via secondary structure), A promotes it, and the Kozak-proximal region (positions ~45–49) shows the strongest positional signal.
+- **Biological signal is recoverable.** Attribution logos show consistent patterns across resolutions: G and C suppress translation (likely via secondary structure), A promotes it, and the Kozak-proximal region (positions ~45-49) shows the strongest positional signal.
+
+---
+## Key Results
+
+Reducing polysome profiling resolution has little impact on predictive performance.
+A CNN trained on coarse 3-bin labels achieves nearly the same accuracy as one trained
+on the full 14-bin experiment.
+
+<p align="center">
+  <img src="results/evaluation_pcc_vs_resolution.png" width="650">
+</p>
+
+While prediction performance remains stable, the learned biological signals change.
+High-resolution models capture fine positional motifs, whereas low-resolution models
+rely more on global sequence composition.
+
+<p align="center">
+  <img src="results/attribution_comparison.png" width="650">
+</p>
 
 ---
 
@@ -65,7 +84,7 @@ polysome-resolution-project/
 
 ### Evaluation
 - **Label ceiling:** PCC(low-res MRL, high-res MRL) on test set. Upper bound imposed by bin merging, independent of any model
-- **Model gap:** ceiling − CNN PCC; indicates whether the bottleneck is resolution or model capacity
+- **Model gap:** ceiling - CNN PCC; indicates whether the bottleneck is resolution or model capacity
 - **Attribution analysis:** Integrated Gradients (Captum) on best-fold models; positional importance profiles compared across resolutions
 
 ---
