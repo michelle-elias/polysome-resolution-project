@@ -1,12 +1,16 @@
+<div align="center">
+
 # Polysome Resolution Project
 
 **Investigating Effects of Polysome Profiling Resolution for a Translation Reporter Assay with Deep Learning**
 
-Systems Biology: Systems Biology: Computational Analysis and Interpretation of High-throughput Data
+Systems Biology: Computational Analysis and Interpretation of High-throughput Data  
 
-Final Project (2025/2026)
+Final Project (2025/2026)  
 
 Humboldt-Universität zu Berlin
+
+</div>
 
 ---
 
