@@ -20,7 +20,11 @@ This project investigates how reducing the resolution of polysome profiling affe
 
 Polysome profiling separates mRNAs by ribosome occupancy via sucrose density gradient centrifugation. The original dataset uses 14 fractions. We simulate lower-resolution experiments by merging adjacent fractions into coarser schemes (7, 5, and 3 bins) and ask: does reducing experimental resolution hurt model performance?
 
-**Reference:** Sample, P.J. et al. Human 5′ UTR design and variant effect prediction from a massively parallel translation assay. *Nature Biotechnology* 37, 803-809 (2019). [GSM3130435](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSM3130435)
+**Reference:** Sample, P.J. et al. Human 5′ UTR design and variant effect prediction from a massively parallel translation assay. *Nature Biotechnology* 37, 803–809 (2019).  
+
+DOI: [10.1038/s41587-019-0164-5](https://doi.org/10.1038/s41587-019-0164-5)
+
+Dataset: [GSM3130435](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSM3130435)
 
 ---
 
