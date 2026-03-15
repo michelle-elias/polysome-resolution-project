@@ -18,7 +18,7 @@ Humboldt-Universität zu Berlin
 
 This project investigates how reducing the resolution of polysome profiling affects the ability of a convolutional neural network (CNN) to predict mean ribosome load (MRL) from 5′ UTR sequences.
 
-Polysome profiling separates mRNAs by ribosome occupancy via sucrose density gradient centrifugation. The original dataset uses 14 fractions. We simulate lower-resolution experiments by merging adjacent fractions into coarser schemes (7, 5, and 3 bins) and ask: does reducing experimental resolution hurt model performance?
+Polysome profiling separates mRNAs by ribosome occupancy via sucrose density gradient centrifugation. The original dataset uses 14 fractions. We simulate lower-resolution experiments by merging adjacent fractions into coarser schemes (7, 5, and 3 bins) and ask: **can polysome profiling experiments be simplified by using fewer fractions without losing predictive power?**
 
 **Reference:** Sample, P.J. et al. Human 5′ UTR design and variant effect prediction from a massively parallel translation assay. *Nature Biotechnology* 37, 803–809 (2019).  
 
