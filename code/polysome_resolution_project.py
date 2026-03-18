@@ -44,7 +44,7 @@ print(f"PyTorch    : {torch.__version__}")
 if torch.cuda.is_available():
     print(f"GPU        : {torch.cuda.get_device_name(0)}")
     print(f"VRAM       : {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB")
-print(f"Runtime    : ~60 min on NVIDIA A100 (Colab)")
+print(f"Runtime    : ~60 min on NVIDIA A100 (Google Colab)")
 
 # Install Captum if missing
 try:
@@ -69,6 +69,7 @@ from scipy.ndimage import uniform_filter1d
 # Visualization
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
+import matplotlib.gridspec as gridspec
 
 # PyTorch
 import torch
@@ -110,8 +111,8 @@ print("DATA_DIR:", DATA_DIR)
 print("FIG_OUT_DIR:", FIG_OUT_DIR)
 
 # Polysome bin definitions
-BIN_COLS = [str(i) for i in range(14)]        # original 14 bin column names
-BIN_IDX  = np.arange(14, dtype=float)         # numeric bin indices (0-13)
+BIN_COLS = [str(i) for i in range(14)] # original 14 bin column names
+BIN_IDX  = np.arange(14, dtype=float)  # numeric bin indices (0-13)
 
 # Schemes chosen to simulate decreasing experimental effort:
 # 14 bins = full resolution (original data)
@@ -121,16 +122,18 @@ MERGE_SCHEMES = {
     "7_bins":  [[0,1],[2,3],[4,5],[6,7],[8,9],[10,11],[12,13]],
     "5_bins":  [[0,1],[2,3,4],[5,6,7],[8,9,10],[11,12,13]],
     "3_bins":  [[0,1,2,3],[4,5,6,7,8],[9,10,11,12,13]],
+    "2_bins":  [[0,1,2,3,4,5,6],[7,8,9,10,11,12,13]],
 }
 
 # Plotting order + colors
-SCHEME_ORDER = ["14_bins", "7_bins", "5_bins", "3_bins"]
-N_BINS_ORDER = [14, 7, 5, 3]
+SCHEME_ORDER = ["14_bins", "7_bins", "5_bins", "3_bins", "2_bins"]
+N_BINS_ORDER = [14, 7, 5, 3, 2]
 PALETTE = {
     "14_bins": "#4C72B0",
     "7_bins":  "#DD8452",
     "5_bins":  "#55A868",
     "3_bins":  "#C44E52",
+    "2_bins":  "#8172B2",
 }
 
 # Training hyperparameters (kept fixed across experiments)
@@ -165,11 +168,11 @@ df_full = pd.read_csv(DATA_DIR / "GSM3130435_egfp_unmod_1.csv", index_col=0)
 
 # Step 1: normalize raw counts within each fraction across the full library
 # sum_n R_nm = total reads in fraction m across ALL UTRs (library-level)
-fraction_totals  = df_full[BIN_COLS].sum(axis=0)                        # shape: (14,)
-relative_r       = df_full[BIN_COLS].div(fraction_totals, axis=1)       # shape: (N_full, 14)
+fraction_totals  = df_full[BIN_COLS].sum(axis=0)                  # shape: (14,)
+relative_r       = df_full[BIN_COLS].div(fraction_totals, axis=1) # shape: (N_full, 14)
 
 # Step 2: normalize across fractions for each UTR
-normalized_r     = relative_r.div(relative_r.sum(axis=1), axis=0)       # shape: (N_full, 14)
+normalized_r     = relative_r.div(relative_r.sum(axis=1), axis=0) # shape: (N_full, 14)
 
 # Store normalized fractions back into df_full as 'rn0'..'rn13'
 # (named differently from the provided r0..r13 to avoid confusion)
@@ -184,13 +187,13 @@ df = df_full.iloc[:280000].copy()
 # Columns used for MRL computation: raw bin counts '0'-'13'
 # r0-r13: provided normalized fractions from original pipeline (not used directly)
 # rn0-rn13: our recomputed normalized fractions via two-step normalization
-# rl: pre-computed MRL from Sample et al. (used as sanity check only)
+# rl: (presumely) pre-computed MRL from Sample et al. (used as sanity check only)
 
 """---
 ## 3. MRL Computation and Validation <a id='3'></a>
 
 Mean Ribosome Load (MRL) quantifies the average number of ribosomes bound to an
-mRNA. We follow the exact normalization pipeline from Sample et al. (2019)
+mRNA. We follow the normalization pipeline from Sample et al. (2019)
 (Supplementary Note 1), which involves two steps:
 
 **Step 1:** Normalize reads within each fraction across the full library
@@ -222,8 +225,7 @@ applying the same two-step normalization, correctly simulating what would be
 measured if fewer fractions were physically collected.
 
 **Validation:** Our recomputed MRL is compared against the provided `rl` column
-from the original pipeline. Near-zero MAE and PCC ≈ 1.000 confirm correct
-implementation.
+from the original pipeline. Close to zero MAE and PCC ≈ 1.000 though confirm correct implementation.
 """
 
 def compute_highres_mrl(df_subset):
@@ -256,15 +258,19 @@ def compute_lowres_mrl(df_subset, scheme):
 df["mrl_from_bins"] = compute_highres_mrl(df)
 
 mae = float(np.mean(np.abs(df["mrl_from_bins"].values - df["rl"].values)))
-print(f"MAE (Mean Absolute Error) vs provided rl column: {mae:.4f}  (should be close to ~0)")
+print("MRL recomputation vs provided 'rl' column")
+print(f"  MAE:  {mae:.4f}")
+print()
+print("  mrl_from_bins distribution:")
+desc = df["mrl_from_bins"].describe()
+for stat, val in desc.items():
+    print(f"    {stat:<8} {val:.4f}")
 
-df["mrl_from_bins"].describe()
-
-# The provided rl column uses a slightly different internal normalization
-# from the original pipeline. Our recomputation is consistent and valid.
+# MAE is non-zero probably due to normalization differences in the original pipeline;
+# PCC confirms the computation is consistent.
 pcc_vs_rl = float(pearsonr(df["mrl_from_bins"].values, df["rl"].values)[0])
-print(f"PCC vs provided rl column: {pcc_vs_rl:.6f}  (should be ~1.0)")
-assert pcc_vs_rl > 0.999, "MRL computation is inconsistent!"
+print(f"  PCC:  {pcc_vs_rl:.6f}  (expected >0.999)")
+assert pcc_vs_rl > 0.999, "MRL computation is inconsistent with provided rl column!"
 print("MRL validation passed.")
 
 # MAE of ~0.125 persists despite implementing the exact two-step normalization
@@ -281,10 +287,6 @@ ax.grid(True, alpha=0.3)
 fig.tight_layout()
 fig.savefig(FIG_OUT_DIR / "mrl_distribution.png", dpi=300, bbox_inches="tight")
 plt.show()
-
-# Bimodal distribution reflects two translation efficiency populations:
-# low-MRL sequences (~4-5 ribosomes, poorly translated)
-# high-MRL sequences (~8 ribosomes, efficiently translated)
 
 """---
 ## 4. Bin Merging and Resolution Schemes <a id='4'></a>
@@ -312,24 +314,34 @@ for name in MERGE_SCHEMES:
         "MAE_vs_high": float(np.mean(np.abs(low - mrl_high))),
         "PCC_vs_high": float(pearsonr(low, mrl_high)[0]),
     })
-
-# Summary table across resolution levels
 info_df = pd.DataFrame(rows).sort_values("n_bins", ascending=False)
+# Summary table across resolution levels
+print("Resolution comparison: low-res MRL vs 14-bin reference")
+print("  (MAE and PCC computed across all genes, no model involved)")
+print()
 print(info_df.to_string(index=False))
 
-fig, axes = plt.subplots(1, 4, figsize=(14, 3.5), sharey=True)  # one panel per resolution scheme
-for ax, scheme_name in zip(axes, SCHEME_ORDER):
-    ax.hist(mrl_per_scheme[scheme_name], bins=80, color=PALETTE[scheme_name], edgecolor="none", alpha=0.8)  # plot MRL histogram
-    ax.set_title(scheme_name.replace("_", " "))  # e.g. "14_bins" -> "14 bins"
-    ax.set_xlabel("MRL")
-axes[0].set_ylabel("Count")  # shared y-axis label on leftmost panel
-fig.suptitle("MRL distributions per resolution scheme", fontsize=11)
+fig, axes = plt.subplots(1, 5, figsize=(18, 4), sharey=True)
+
+FONT = 14
+
+for ax, scheme_name in zip(axes, SCHEME_ORDER):  # assumes SCHEME_ORDER = 14,7,5,3,2
+    ax.hist(mrl_per_scheme[scheme_name], bins=80,
+            color=PALETTE[scheme_name], edgecolor="none", alpha=0.8)
+    ax.set_title(scheme_name.replace("_", " "), fontsize=FONT + 2)
+    ax.set_xlabel("MRL", fontsize=FONT)
+    ax.tick_params(labelsize=FONT)
+
+axes[0].set_ylabel("Count", fontsize=FONT)
+fig.suptitle("MRL distributions per resolution scheme", fontsize=FONT + 3, y=1.02)
 fig.tight_layout()
 fig.savefig(FIG_OUT_DIR / "mrl_distributions_per_scheme.png", dpi=300, bbox_inches="tight")
 plt.show()
 
-# Key takeaway: even 3 bins gives PCC=0.9980 vs the 14-bin reference, meaning
-# merging bins barely loses information at the label level.
+# Key takeaway: MRL labels are robust to bin merging down to 3 bins; PCC vs
+# 14-bin reference stays above 0.997 (MAE < 0.14). At 2 bins the label quality
+# drops more sharply (PCC = 0.980, MAE = 0.34). CNN performance is similarly
+# flat across 14→3bins (ΔPCC < 0.001), but attribution profiles diverge at low resolution.
 
 """---
 ## 5. Train / Test Split <a id='5'></a>
@@ -359,9 +371,12 @@ train_idx, val_idx = train_test_split(
     trainval_idx, test_size=0.125, random_state=SEED, shuffle=True
 ) # 12.5% of remaining 80% = 10% of total -> final: 70/10/20
 
-print(f"Train : {len(train_idx):>7,}  ({len(train_idx)/len(df)*100:.1f} %)")
-print(f"Val   : {len(val_idx):>7,}  ({len(val_idx)/len(df)*100:.1f} %)")
-print(f"Test  : {len(test_idx):>7,}  ({len(test_idx)/len(df)*100:.1f} %)")
+print("Dataset split (70 / 10 / 20)")
+print(f"  Train : {len(train_idx):>7,}  ({len(train_idx)/len(df)*100:.1f}%)")
+print(f"  Val   : {len(val_idx):>7,}  ({len(val_idx)/len(df)*100:.1f}%)")
+print(f"  Test  : {len(test_idx):>7,}  ({len(test_idx)/len(df)*100:.1f}%)")
+print(f"  Total : {len(df):>7,}  (indices saved to {DATA_DIR})")
+print()
 assert len(train_idx) + len(val_idx) + len(test_idx) == len(df) # sanity check: no rows lost
 
 # Save indices to disk so all experiments use the identical partition
@@ -376,16 +391,18 @@ df_val   = df.iloc[val_idx].reset_index(drop=True)
 df_test  = df.iloc[test_idx].reset_index(drop=True)
 
 # Verify MRL distribution is consistent across splits (no accidental stratification bias)
+print("MRL distribution per split (expect ~equal mean/std across splits):")
+print(f"  {'split':<6}  {'mean':>7}  {'std':>7}")
 for name, subset in [("Train", df_train), ("Val", df_val), ("Test", df_test)]:
     m, s = subset["mrl_from_bins"].mean(), subset["mrl_from_bins"].std()
-    print(f"{name:5s}  MRL mean={m:.4f}  std={s:.4f}")
+    print(f"  {name:<6}  {m:>7.4f}  {s:>7.4f}")
 
 """---
 ## 6. One-Hot Encoding <a id='6'></a>
 
 Before being passed to the CNN, each 50-nt 5′ UTR sequence is converted into a
 numerical tensor using **one-hot encoding**. Each nucleotide is represented as a
-length-4 binary vector over the alphabet {A, C, G, T/U}, resulting in a (4 × 50)
+length-4 binary vector over the alphabet {A, C, G, T/U}, resulting in a (4 x 50)
 matrix per sequence:
 ```
 A   -> [1, 0, 0, 0]
@@ -438,9 +455,9 @@ We use a 1D convolutional neural network (CNN) to predict MRL from one-hot encod
 The model consists of three convolutional layers (Conv1d + ReLU) that extract local sequence motifs, followed by a flattening step and a fully connected (FC) regression head that maps the learned features to a scalar MRL prediction:
 ```
 Input (N, 4, 50)
-→ 3 × [Conv1d + ReLU]     # local motif extraction
-→ Flatten                  # (N, n_filters × 50)
-→ n_fc_layers × [Linear + ReLU + Dropout]
+→ 3 x [Conv1d + ReLU]     # local motif extraction
+→ Flatten                  # (N, n_filters x 50)
+→ n_fc_layers x [Linear + ReLU + Dropout]
 → Linear(1)                # scalar MRL prediction
 ```
 
@@ -464,7 +481,7 @@ sequences) for 40 epochs without early stopping before final evaluation.
 class CNNModel(nn.Module):
     """
     1D CNN to predict MRL from one-hot 5'UTR input (N, 4, L).
-    3×(Conv1d + ReLU) -> Flatten -> n_fc_layers×(Linear + ReLU + Dropout) -> Linear(1)
+    3x(Conv1d + ReLU) -> Flatten -> n_fc_layersx(Linear + ReLU + Dropout) -> Linear(1)
     """
     def __init__(self, seq_len=50, n_filters=120, kernel_size=8,
                  fc_width=40, n_fc_layers=1, dropout=0.2):
@@ -477,7 +494,7 @@ class CNNModel(nn.Module):
             nn.Conv1d(n_filters, n_filters, kernel_size, padding="same"), nn.ReLU(),
         )
 
-        # Flatten conv output (n_filters × seq_len) into a vector
+        # Flatten conv output (n_filters x seq_len) into a vector
         in_dim = n_filters * seq_len
 
         # MLP head (depth controlled by n_fc_layers)
@@ -617,7 +634,6 @@ def train_model(config, X_tr, y_tr, X_v=None, y_v=None,
 # by architectural variation.
 
 # We vary conv capacity (kernel_size, n_filters) and MLP head (n_fc_layers, fc_width, dropout)
-
 FIXED_CONFIGS = [
     # Baseline reference
     {"kernel_size": 9,  "n_filters": 120, "n_fc_layers": 1, "fc_width": 40, "dropout": 0.2},
@@ -731,6 +747,10 @@ with open(DATA_DIR / "best_arch_config.json", "w") as f:
 
 print("Model and config saved.")
 
+# NOTE: this model is not used downstream. CV folds (trained per resolution
+# scheme below) are the models used for evaluation and attribution analysis.
+# This run serves as a quick sanity check on the best config before the full CV.
+
 plot_params = ["kernel_size", "n_filters", "n_fc_layers", "fc_width", "dropout"]
 
 fig, axes = plt.subplots(1, len(plot_params), figsize=(4 * len(plot_params), 4))
@@ -756,10 +776,10 @@ for ax, param in zip(axes, plot_params):
     ax.grid(axis="y", alpha=0.3)
 
 for ax in axes:
-    ax.tick_params(labelsize=12)
-    ax.set_xlabel(ax.get_xlabel(), fontsize=13)
-    ax.set_ylabel(ax.get_ylabel(), fontsize=13)
-    ax.set_title(ax.get_title(), fontsize=14)
+    ax.tick_params(labelsize=15)
+    ax.set_xlabel(ax.get_xlabel(), fontsize=14)
+    ax.set_ylabel(ax.get_ylabel(), fontsize=14)
+    ax.set_title(ax.get_title(), fontsize=15)
 
 fig.suptitle("Architecture search - val PCC (14-bin MRL)", fontsize=16)
 fig.tight_layout()
@@ -952,6 +972,12 @@ for scheme_name in SCHEME_ORDER:
 
 y_true = y_test_highres.numpy() # ground truth high-res MRL for all test sequences
 
+# CV results summary:
+# - 14/7/5/3-bin models all reach mean test PCC ~0.945, with ΔPCC < 0.001 across schemes.
+# - 2-bin drops to PCC = 0.931, consistent with its lower label ceiling (0.981).
+# - val_pcc(low-res) ≈ test_pcc(high-res) for 14 -> 3 bins, confirming low-res labels
+#   are sufficient training signal down to 3 bins. Gap widens at 2 bins.
+
 # Evaluation figure
 
 # Align all arrays to the same scheme order
@@ -961,15 +987,17 @@ stds      = summ["std_pcc"].values           # CNN std test PCC per scheme
 ceil_vals = [label_ceiling[s] for s in SCHEME_ORDER]  # label ceiling per scheme
 rng       = np.random.default_rng(SEED)      # deterministic jitter/subsampling for plots
 
-# Figure layout: 2 rows, panels A/B on top, C (2×2 grid) and D on bottom
+# Figure layout: 2 rows, panels A/B on top, C and D on bottom
 fig = plt.figure(figsize=(14, 10))
 gs_top = fig.add_gridspec(1, 2, top=0.97, bottom=0.56, left=0.08, right=0.97, wspace=0.30)
 gs_bot = fig.add_gridspec(1, 2, top=0.46, bottom=0.07, left=0.08, right=0.97, wspace=0.35)
-gs_C   = gs_bot[0].subgridspec(2, 2, wspace=0.45, hspace=0.55) # 2×2 scatter grid
+gs_C = gs_bot[0].subgridspec(2, 3, wspace=0.45, hspace=0.55) # 2x3 scatter grid
 
 ax_A   = fig.add_subplot(gs_top[0])                       # A: mean ± std + ceiling
 ax_B   = fig.add_subplot(gs_top[1])                       # B: fold-level distribution
-axes_C = [fig.add_subplot(gs_C[r, c]) for r in range(2) for c in range(2)]  # C: scatter grid
+axes_C = []
+for idx in range(len(SCHEME_ORDER)):  # 5
+    axes_C.append(fig.add_subplot(gs_C[idx // 3, idx % 3]))  # C:
 ax_D   = fig.add_subplot(gs_bot[1])                       # D: ceiling vs model bars
 
 # Panel A - mean CNN PCC vs resolution, with label ceiling and model gap shaded
@@ -993,8 +1021,14 @@ for nb, m in zip(N_BINS_ORDER, means):
         textcoords="offset points", ha="center", fontsize=8.5, color="steelblue"
     )
 ax_A.set_xlabel("Number of polysome bins")
-ax_A.set_ylabel("PCC vs. high-res MRL")
-ax_A.set_title("A   Performance vs. resolution", fontweight="bold")
+ax_A.set_ylabel("Test PCC vs. 14-bin MRL (ground truth)")
+ax_A.set_title("A   Performance vs. training resolution", fontweight="bold")
+ax_A.text(
+    0.97, 0.05,
+    "All models evaluated against\n14-bin MRL, regardless of\ntraining resolution",
+    transform=ax_A.transAxes, fontsize=8, va="bottom", ha="right",
+    bbox=dict(boxstyle="round,pad=0.4", facecolor="lightyellow", edgecolor="grey", alpha=0.9),
+)
 ax_A.set_xticks(N_BINS_ORDER)
 ax_A.set_xlim(1.5, 15.5)
 ax_A.legend(fontsize=9)
@@ -1015,7 +1049,7 @@ for i, scheme in enumerate(SCHEME_ORDER):
         colors=PALETTE[scheme], linewidths=2.8, zorder=4 # mean line per scheme
     )
 ax_B.set_xlabel("Number of polysome bins")
-ax_B.set_ylabel("Test PCC (per fold)")
+ax_B.set_ylabel("Test PCC vs. 14-bin MRL (per fold)")
 ax_B.set_title("B   Per-fold PCC distribution", fontweight="bold")
 ax_B.set_xticks(N_BINS_ORDER)
 ax_B.set_xlim(1.5, 15.5)
@@ -1049,13 +1083,13 @@ for ax_c, scheme in zip(axes_C, SCHEME_ORDER):
     ax_c.plot(lims, lims, "k--", lw=0.8, alpha=0.6)
     ax_c.set_xlim(lims)
     ax_c.set_ylim(lims)
-    ax_c.set_xlabel("True MRL (high-res)", fontsize=8)
+    ax_c.set_xlabel("True MRL (14-bin reference)", fontsize=8)
     ax_c.set_ylabel("Predicted MRL", fontsize=8)
     ax_c.set_title(f"{scheme}  r={pcc_val:.3f}", fontsize=9,
                    fontweight="bold", color=PALETTE[scheme])
     ax_c.tick_params(labelsize=7)
 axes_C[0].annotate(
-    "C   Predicted vs. true MRL (best fold)",
+    "C   Predicted vs. true MRL (best fold) - ground truth: 14-bin MRL",
     xy=(-0.18, 1.22), xycoords="axes fraction",
     fontsize=11, fontweight="bold"
 )
@@ -1083,8 +1117,8 @@ for xi, (ceil, mean) in enumerate(zip(ceil_vals, means)):
 ax_D.set_xticks(x)
 ax_D.set_xticklabels(labels_short)
 ax_D.set_xlabel("Resolution scheme (bins)")
-ax_D.set_ylabel("PCC vs. high-res MRL")
-ax_D.set_title("D   Label ceiling vs. CNN PCC", fontweight="bold")
+ax_D.set_ylabel("PCC vs. 14-bin MRL (ground truth)")
+ax_D.set_title("D   Label ceiling vs. CNN PCC\n(common reference: 14-bin MRL)", fontweight="bold")
 ax_D.set_ylim(min(means) - 0.04, 1.01)
 ax_D.legend(fontsize=9)
 ax_D.grid(True, axis="y", alpha=0.25)
@@ -1108,11 +1142,26 @@ for scheme in SCHEME_ORDER:
 # Quantify performance loss relative to full-resolution baseline (14 bins)
 baseline = summ.loc["14_bins", "mean_pcc"]
 
-print("\nPCC drop relative to 14-bin baseline:")
+print("CNN performance vs label ceiling by resolution")
+print("Label ceiling = PCC between low-res and 14-bin MRL labels (no model)")
+print()
+print(f"{'Scheme':<12} {'Bins':>5} {'Label ceil':>11} {'CNN PCC':>9} {'±std':>6} {'Gap':>7}")
+print("-" * 52)
+
+for scheme in SCHEME_ORDER:
+    row  = summ.loc[scheme]
+    ceil = label_ceiling[scheme]
+    print(f"{scheme:<12} {int(row['n_bins']):>5} {ceil:>11.4f} "
+          f"{row['mean_pcc']:>9.4f} {row['std_pcc']:>6.4f} "
+          f"{ceil-row['mean_pcc']:>7.4f}")
+
+baseline = summ.loc["14_bins", "mean_pcc"]
+
+print()
+print("PCC drop relative to 14-bin baseline:")
 for scheme in SCHEME_ORDER[1:]:
     drop = baseline - summ.loc[scheme, "mean_pcc"]
-    print(f"  14_bins -> {scheme:<10}  ΔPCC = {drop:.4f}  "
-          f"({drop/baseline*100:.2f} %)") # relative drop as percentage
+    print(f"  14_bins -> {scheme:<10}  ΔPCC = {drop:.4f}  ({drop/baseline*100:.2f}%)")
 
 """---
 ## 9. Attribution Analysis via Integrated Gradients <a id='9'></a>
@@ -1258,7 +1307,10 @@ for i, s1 in enumerate(SCHEME_ORDER):
             pearsonr(profiles[s1], profiles[s2])[0]
         )
 
-print("\nCross-resolution profile correlation:")
+print("Cross-resolution attribution profile correlation (Pearson r)")
+print("Measures similarity of positional importance profiles between resolution schemes.")
+print("Low off-diagonal values indicate models learned different sequence features.")
+print()
 print(
     pd.DataFrame(
         corr_matrix,
@@ -1347,27 +1399,39 @@ fig.tight_layout()
 fig.savefig(FIG_OUT_DIR / "per_nucleotide_importance_all_schemes.png", dpi=300, bbox_inches="tight")
 plt.show()
 
-!pip -q install logomaker # (if not installed)
+!pip -q install logomaker
 
 import logomaker
 
-# Attribution logo - all schemes stacked
-fig, axes = plt.subplots(len(SCHEME_ORDER), 1, figsize=(18, 3 * len(SCHEME_ORDER)), sharex=True)
+FONT = 14
+y_min, y_max = -0.09, 0.07
 
-for ax, scheme in zip(axes, SCHEME_ORDER):
+fig, axes = plt.subplots(len(SCHEME_ORDER), 1,
+                         figsize=(18, 3.5 * len(SCHEME_ORDER)), sharex=True)
+
+for i, (ax, scheme) in enumerate(zip(axes, SCHEME_ORDER)):
     mean_attr = ig_attrs[scheme].mean(axis=0).T  # (50, 4)
     logo_df = pd.DataFrame(mean_attr, columns=nuc_labels)
     logomaker.Logo(logo_df, ax=ax, color_scheme='classic')
     ax.axhline(0, color='black', linewidth=0.8, linestyle='--')
-    ax.set_ylabel("Mean IG attribution")
-    ax.set_title(f"Attribution logo: {scheme}", fontweight="bold")
+
+    # 5' end marker
+    ax.axvline(-0.5, color='steelblue', linewidth=2.0, linestyle=':', alpha=0.8)
+
+    # Landmark labels on first panel only
+    if i == 0:
+        ax.text(0.2,  y_max * 0.80, "5′ end",
+                color='steelblue', fontsize=FONT - 1)
+        ax.text(48.50, y_max * 0.80, "3′ end",
+                color='firebrick', fontsize=FONT - 1, ha='right')
+
+    ax.set_ylabel("Mean IG attribution", fontsize=FONT)
+    ax.set_title(scheme.replace("_", " "), fontsize=FONT + 2, fontweight="bold")
+    ax.set_ylim(y_min, y_max)
+    ax.tick_params(labelsize=FONT - 1)
     ax.grid(True, alpha=0.25)
 
-axes[-1].set_xlabel("Position in 5′ UTR (nt)")
+axes[-1].set_xlabel("Position in 5′ UTR (nt)", fontsize=FONT)
 fig.tight_layout()
 fig.savefig(FIG_OUT_DIR / "attribution_logo_all_schemes.png", dpi=300, bbox_inches="tight")
 plt.show()
-
-# Above zero = having this nucleotide at this position tends to increase translation efficiency (pushes MRL up)
-# Below zero = having this nucleotide at this position tends to decrease translation efficiency (pushes MRL down)
-
